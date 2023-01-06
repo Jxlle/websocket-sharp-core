@@ -1,5 +1,7 @@
 ![Logo](websocket-sharp_logo.png)
 
+THIS IS A RECOMPILATION OF THE ORIGINAL WEBSOCKET-SHARP PROJECT
+
 ## Welcome to websocket-sharp! ##
 
 websocket-sharp supports:
