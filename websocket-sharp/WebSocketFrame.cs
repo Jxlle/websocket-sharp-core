@@ -4,7 +4,7 @@
  *
  * The MIT License
  *
- * Copyright (c) 2012-2021 sta.blockhead
+ * Copyright (c) 2012-2023 sta.blockhead
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -45,16 +45,28 @@ namespace WebSocketSharp
   {
     #region Private Fields
 
-    private byte[]      _extPayloadLength;
-    private Fin         _fin;
-    private Mask        _mask;
-    private byte[]      _maskingKey;
-    private Opcode      _opcode;
-    private PayloadData _payloadData;
-    private byte        _payloadLength;
-    private Rsv         _rsv1;
-    private Rsv         _rsv2;
-    private Rsv         _rsv3;
+    private static readonly int _defaultHeaderLength;
+    private static readonly int _defaultMaskingKeyLength;
+    private byte[]              _extPayloadLength;
+    private Fin                 _fin;
+    private Mask                _mask;
+    private byte[]              _maskingKey;
+    private Opcode              _opcode;
+    private PayloadData         _payloadData;
+    private byte                _payloadLength;
+    private Rsv                 _rsv1;
+    private Rsv                 _rsv2;
+    private Rsv                 _rsv3;
+
+    #endregion
+
+    #region Static Constructor
+
+    static WebSocketFrame ()
+    {
+      _defaultHeaderLength = 2;
+      _defaultMaskingKeyLength = 4;
+    }
 
     #endregion
 
@@ -233,8 +245,11 @@ namespace WebSocketSharp
 
     public ulong Length {
       get {
-        return 2
-               + (ulong) (_extPayloadLength.Length + _maskingKey.Length)
+        return (ulong) (
+                 _defaultHeaderLength
+                 + _extPayloadLength.Length
+                 + _maskingKey.Length
+               )
                + _payloadData.Length;
       }
     }
@@ -293,7 +308,7 @@ namespace WebSocketSharp
 
     private static byte[] createMaskingKey ()
     {
-      var key = new byte[4];
+      var key = new byte[_defaultMaskingKeyLength];
 
       WebSocket.RandomNumber.GetBytes (key);
 
@@ -302,7 +317,7 @@ namespace WebSocketSharp
 
     private static WebSocketFrame processHeader (byte[] header)
     {
-      if (header.Length != 2) {
+      if (header.Length != _defaultHeaderLength) {
         var msg = "The header part of a frame could not be read.";
 
         throw new WebSocketException (msg);
@@ -329,7 +344,7 @@ namespace WebSocketSharp
       // Payload Length
       var payloadLen = (byte) (header[1] & 0x7f);
 
-      if (!opcode.IsSupported ()) {
+      if (!opcode.IsSupportedOpcode ()) {
         var msg = "The opcode of a frame is not supported.";
 
         throw new WebSocketException (CloseStatusCode.UnsupportedData, msg);
@@ -408,7 +423,7 @@ namespace WebSocketSharp
 
     private static WebSocketFrame readHeader (Stream stream)
     {
-      var bytes = stream.ReadBytes (2);
+      var bytes = stream.ReadBytes (_defaultHeaderLength);
 
       return processHeader (bytes);
     }
@@ -418,7 +433,7 @@ namespace WebSocketSharp
     )
     {
       stream.ReadBytesAsync (
-        2,
+        _defaultHeaderLength,
         bytes => {
           var frame = processHeader (bytes);
 
@@ -438,10 +453,9 @@ namespace WebSocketSharp
         return frame;
       }
 
-      var len = 4;
-      var bytes = stream.ReadBytes (len);
+      var bytes = stream.ReadBytes (_defaultMaskingKeyLength);
 
-      if (bytes.Length != len) {
+      if (bytes.Length != _defaultMaskingKeyLength) {
         var msg = "The masking key of a frame could not be read.";
 
         throw new WebSocketException (msg);
@@ -467,12 +481,10 @@ namespace WebSocketSharp
         return;
       }
 
-      var len = 4;
-
       stream.ReadBytesAsync (
-        len,
+        _defaultMaskingKeyLength,
         bytes => {
-          if (bytes.Length != len) {
+          if (bytes.Length != _defaultMaskingKeyLength) {
             var msg = "The masking key of a frame could not be read.";
 
             throw new WebSocketException (msg);
@@ -626,27 +638,27 @@ namespace WebSocketSharp
         var j = i * 4;
 
         if (i < cnt) {
-          writeLine (
-            Convert.ToString (bytes[j], 2).PadLeft (8, '0'),
-            Convert.ToString (bytes[j + 1], 2).PadLeft (8, '0'),
-            Convert.ToString (bytes[j + 2], 2).PadLeft (8, '0'),
-            Convert.ToString (bytes[j + 3], 2).PadLeft (8, '0')
-          );
+          var arg1 = Convert.ToString (bytes[j], 2).PadLeft (8, '0');
+          var arg2 = Convert.ToString (bytes[j + 1], 2).PadLeft (8, '0');
+          var arg3 = Convert.ToString (bytes[j + 2], 2).PadLeft (8, '0');
+          var arg4 = Convert.ToString (bytes[j + 3], 2).PadLeft (8, '0');
+
+          writeLine (arg1, arg2, arg3, arg4);
 
           continue;
         }
 
         if (rem > 0) {
-          writeLine (
-            Convert.ToString (bytes[j], 2).PadLeft (8, '0'),
-            rem >= 2
-            ? Convert.ToString (bytes[j + 1], 2).PadLeft (8, '0')
-            : String.Empty,
-            rem == 3
-            ? Convert.ToString (bytes[j + 2], 2).PadLeft (8, '0')
-            : String.Empty,
-            String.Empty
-          );
+          var arg1 = Convert.ToString (bytes[j], 2).PadLeft (8, '0');
+          var arg2 = rem >= 2
+                     ? Convert.ToString (bytes[j + 1], 2).PadLeft (8, '0')
+                     : String.Empty;
+
+          var arg3 = rem == 3
+                     ? Convert.ToString (bytes[j + 2], 2).PadLeft (8, '0')
+                     : String.Empty;
+
+          writeLine (arg1, arg2, arg3, String.Empty);
         }
       }
 
@@ -657,15 +669,15 @@ namespace WebSocketSharp
 
     private string toString ()
     {
-      var extPayloadLen = _payloadLength > 125
+      var extPayloadLen = _payloadLength >= 126
                           ? ExactPayloadLength.ToString ()
                           : String.Empty;
 
-      var maskingKey = _maskingKey.Length > 0
+      var maskingKey = _mask == Mask.On
                        ? BitConverter.ToString (_maskingKey)
                        : String.Empty;
 
-      var payloadData = _payloadLength > 125
+      var payloadData = _payloadLength >= 126
                         ? "***"
                         : _payloadLength > 0
                           ? _payloadData.ToString ()
@@ -824,24 +836,21 @@ Extended Payload Length: {7}
         var uint16Header = (ushort) header;
         var rawHeader = uint16Header.ToByteArray (ByteOrder.Big);
 
-        buff.Write (rawHeader, 0, 2);
+        buff.Write (rawHeader, 0, _defaultHeaderLength);
 
-        if (_payloadLength > 125) {
-          var cnt = _payloadLength == 126 ? 2 : 8;
-
-          buff.Write (_extPayloadLength, 0, cnt);
-        }
+        if (_payloadLength >= 126)
+          buff.Write (_extPayloadLength, 0, _extPayloadLength.Length);
 
         if (_mask == Mask.On)
-          buff.Write (_maskingKey, 0, 4);
+          buff.Write (_maskingKey, 0, _defaultMaskingKeyLength);
 
         if (_payloadLength > 0) {
           var bytes = _payloadData.ToArray ();
 
-          if (_payloadLength < 127)
-            buff.Write (bytes, 0, bytes.Length);
-          else
+          if (_payloadLength > 126)
             buff.WriteBytes (bytes, 1024);
+          else
+            buff.Write (bytes, 0, bytes.Length);
         }
 
         buff.Close ();

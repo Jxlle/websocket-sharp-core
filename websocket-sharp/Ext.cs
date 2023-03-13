@@ -14,7 +14,7 @@
  * Copyright (c) 2003 Ben Maurer
  * Copyright (c) 2003, 2005, 2009 Novell, Inc. (http://www.novell.com)
  * Copyright (c) 2009 Stephane Delcroix
- * Copyright (c) 2010-2022 sta.blockhead
+ * Copyright (c) 2010-2023 sta.blockhead
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -526,10 +526,10 @@ namespace WebSocketSharp
       this string value, CompressionMethod method
     )
     {
-      var val = method.ToExtensionString ();
+      var extStr = method.ToExtensionString ();
       var compType = StringComparison.Ordinal;
 
-      return value.StartsWith (val, compType);
+      return value.StartsWith (extStr, compType);
     }
 
     internal static bool IsEqualTo (
@@ -558,7 +558,12 @@ namespace WebSocketSharp
       return value > 0 && value < 65536;
     }
 
-    internal static bool IsReserved (this ushort code)
+    internal static bool IsReserved (this CloseStatusCode code)
+    {
+      return ((ushort) code).IsReservedStatusCode ();
+    }
+
+    internal static bool IsReservedStatusCode (this ushort code)
     {
       return code == 1004
              || code == 1005
@@ -566,15 +571,7 @@ namespace WebSocketSharp
              || code == 1015;
     }
 
-    internal static bool IsReserved (this CloseStatusCode code)
-    {
-      return code == CloseStatusCode.Undefined
-             || code == CloseStatusCode.NoStatus
-             || code == CloseStatusCode.Abnormal
-             || code == CloseStatusCode.TlsHandshakeFailure;
-    }
-
-    internal static bool IsSupported (this byte opcode)
+    internal static bool IsSupportedOpcode (this byte opcode)
     {
       return Enum.IsDefined (typeof (Opcode), opcode);
     }
